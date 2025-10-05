@@ -125,7 +125,7 @@ ls -la /dev/dri/
 # Should show card0 and renderD128
 ```
 
-### 2. VM OS Kernel Upgrade (Critical for Intel GPU Support)
+### 4. VM OS Kernel Upgrade (Critical for Intel GPU Support)
 Upgrade to the latest kernel for proper Intel GPU driver support:
 
 ```bash
@@ -144,7 +144,7 @@ uname -r
 # Expected output: 6.16.3+deb13-amd64
 ```
 
-### 3. Intel GPU Drivers and Firmware
+### 5. Intel GPU Drivers and Firmware
 Install required Intel GPU drivers and firmware:
 
 ```bash
@@ -159,10 +159,10 @@ sudo apt install firmware-misc-nonfree
 lspci | grep VGA
 # Expected output: Intel Corporation Alder Lake-N [UHD Graphics]
 ```
-### 4. Docker
+### 6. Docker
+Standard docker installation is needed.
 
-
-### 5. User Permissions
+### 7. User Permissions
 Add user to required groups for GPU and video device access:
 
 ```bash
@@ -174,7 +174,7 @@ groups $USER
 # Should include: video render
 ```
 
-### 6. Verify GPU Access
+### 8. Verify GPU Access
 Test that GPU acceleration is working:
 
 ```bash
@@ -351,4 +351,5 @@ docker compose logs frigate --follow | grep -i "gpu\|openvino"
 - GPU telemetry requires additional host-level configuration beyond standard containerization
 
 - Proper device permissions and group membership are critical for GPU access
+
 
