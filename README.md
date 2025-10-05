@@ -1,42 +1,44 @@
-# Intel N150 GPU Hardware PCIE Passthrough and Acceleration for inference in Frigate docker on Debian 13 VM on Proxmox-VE 9 using IOMMU and SRIOV
+# Intel Alder Lake GPU Hardware PCIE Passthrough and Acceleration for inference in Frigate docker on Debian 13 VM on Proxmox-VE 9 using IOMMU and SRIOV
 
-This guide documents the steps taken to successfully configure Intel N150 Integrated GPU for hardware acceleration in Frigate NVR running in Docker on Debian VM on Proxmox VE 9.
+This guide documents the steps taken to successfully configure Intel Alder Lake (N150, N100) Integrated GPU for hardware passthrough to a container (in this case Frigate NVR) running  on a Debian 13 VM on Proxmox VE 9 hypervisor. This enables hardware accelleration for artificial intelligence (AI) models for video object detection using inference models such as yolov9 and yolonas.
+
+This same approach could be used to enable hardware accellerated encoding and decoding for multimedia applications such as [Jellyfin]([https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/intel/](https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/intel/#linux-setups)) and [Plex Media Server](https://github.com/plexinc/pms-docker#intel-quick-sync-hardware-transcoding-support).
+
+The issue I ran into when setting this up was that I could see the integrated GPU on the Proxmox Host OS but when I mapped it to the guest VMs (and I tried a few using the [Proxmox Community Helper scripts](https://community-scripts.github.io/ProxmoxVE/) such as Ubuntu 24.04, Ubuntu 25.04, Home Assistant OS, Debain 12, Debian 13), the guest VMs could never see the device in /dev/dri. I then found [a post on the Proxmox foums by user Michele.Scapini in which they said they got it working on Linux Kernel 6.11+](https://forum.proxmox.com/threads/intel-n150-gpu-passthrough.160477/post-759795) which got me unblocked. If you understand all other aspects of VT-d and hardware passthrough on proxomx and kernel upgrade steps, that's all you need to know. If you do not, read on for a detailed step-by-step guide to get this working for you.
 
 ## Table of Contents
-- [Intel N150 GPU Hardware PCIE Passthrough and Acceleration for inference in Frigate docker on Debian 13 VM on Proxmox-VE 9 using IOMMU and SRIOV](#intel-n150-gpu-hardware-pcie-passthrough-and-acceleration-for-inference-in-frigate-docker-on-debian-13-vm-on-proxmox-ve-9-using-iommu-and-sriov)
-  - [Table of Contents](#table-of-contents)
-  - [Goal](#goal)
-  - [Use Case](#use-case)
-  - [References](#references)
-  - [System Configuration](#system-configuration)
-  - [Prerequisites](#prerequisites)
-    - [1. BIOS Configuration (Required for GPU Passthrough)](#1-bios-configuration-required-for-gpu-passthrough)
-    - [2. VM Configuration in Proxmox:](#2-vm-configuration-in-proxmox)
-    - [3. Verify GPU access in Debian 13 VM](#3-verify-gpu-access-in-debian-13-vm)
-    - [2. VM OS Kernel Upgrade (Critical for Intel GPU Support)](#2-vm-os-kernel-upgrade-critical-for-intel-gpu-support)
-    - [3. Intel GPU Drivers and Firmware](#3-intel-gpu-drivers-and-firmware)
-    - [4. Docker](#4-docker)
-    - [5. User Permissions](#5-user-permissions)
-    - [6. Verify GPU Access](#6-verify-gpu-access)
-  - [Docker Configuration](#docker-configuration)
-    - [Docker Compose Setup](#docker-compose-setup)
-  - [Frigate Configuration](#frigate-configuration)
-    - [Key Configuration Elements](#key-configuration-elements)
-      - [Detector Configuration (OpenVINO with Intel GPU)](#detector-configuration-openvino-with-intel-gpu)
-      - [Model Configuration (YOLOv9)](#model-configuration-yolov9)
-      - [Camera Configuration](#camera-configuration)
-  - [Troubleshooting Steps Taken](#troubleshooting-steps-taken)
-    - [1. Initial Container Crashes](#1-initial-container-crashes)
-    - [2. Model File Access Issues](#2-model-file-access-issues)
-    - [3. Configuration Validation Errors](#3-configuration-validation-errors)
-    - [4. GPU Telemetry Issues (Partial Success)](#4-gpu-telemetry-issues-partial-success)
-  - [Final Working Configuration](#final-working-configuration)
-    - [Hardware Acceleration Status](#hardware-acceleration-status)
-    - [Performance Results](#performance-results)
-  - [Key Learnings](#key-learnings)
-  - [Files Structure](#files-structure)
-  - [Verification Commands](#verification-commands)
-  - [Notes](#notes)
+ - [Goal](#goal)
+ - [Use Case](#use-case)
+ - [References](#references)
+ - [System Configuration](#system-configuration)
+ - [Prerequisites](#prerequisites)
+   - [1. BIOS Configuration (Required for GPU Passthrough)](#1-bios-configuration-required-for-gpu-passthrough)
+   - [2. VM Configuration in Proxmox:](#2-vm-configuration-in-proxmox)
+   - [3. Verify GPU access in Debian 13 VM](#3-verify-gpu-access-in-debian-13-vm)
+   - [2. VM OS Kernel Upgrade (Critical for Intel GPU Support)](#2-vm-os-kernel-upgrade-critical-for-intel-gpu-support)
+   - [3. Intel GPU Drivers and Firmware](#3-intel-gpu-drivers-and-firmware)
+   - [4. Docker](#4-docker)
+   - [5. User Permissions](#5-user-permissions)
+   - [6. Verify GPU Access](#6-verify-gpu-access)
+ - [Docker Configuration](#docker-configuration)
+   - [Docker Compose Setup](#docker-compose-setup)
+ - [Frigate Configuration](#frigate-configuration)
+   - [Key Configuration Elements](#key-configuration-elements)
+     - [Detector Configuration (OpenVINO with Intel GPU)](#detector-configuration-openvino-with-intel-gpu)
+     - [Model Configuration (YOLOv9)](#model-configuration-yolov9)
+     - [Camera Configuration](#camera-configuration)
+ - [Troubleshooting Steps Taken](#troubleshooting-steps-taken)
+   - [1. Initial Container Crashes](#1-initial-container-crashes)
+   - [2. Model File Access Issues](#2-model-file-access-issues)
+   - [3. Configuration Validation Errors](#3-configuration-validation-errors)
+   - [4. GPU Telemetry Issues (Partial Success)](#4-gpu-telemetry-issues-partial-success)
+ - [Final Working Configuration](#final-working-configuration)
+   - [Hardware Acceleration Status](#hardware-acceleration-status)
+   - [Performance Results](#performance-results)
+ - [Key Learnings](#key-learnings)
+ - [Files Structure](#files-structure)
+ - [Verification Commands](#verification-commands)
+ - [Notes](#notes)
 
 ## Goal
 
@@ -347,4 +349,5 @@ docker compose logs frigate --follow | grep -i "gpu\|openvino"
 - Intel GPU hardware acceleration works best for AI inference tasks
 - Video decode acceleration should be avoided with USB MJPEG cameras
 - GPU telemetry requires additional host-level configuration beyond standard containerization
+
 - Proper device permissions and group membership are critical for GPU access
