@@ -1,4 +1,4 @@
-# Intel Alder Lake GPU Hardware PCIE Passthrough and Acceleration for inference in Frigate docker on Debian 13 VM on Proxmox-VE 9 using IOMMU and SRIOV
+# Intel Alder Lake GPU Hardware PCIE Passthrough and Acceleration for a container running on on Debian 13 VM on Proxmox-VE 9 using VT-d, IOMMU, and SRIOV
 
 This guide documents the steps taken to successfully configure Intel Alder Lake (N150, N100) Integrated GPU for hardware passthrough to a container (in this case Frigate NVR) running  on a Debian 13 VM on Proxmox VE 9 hypervisor. This enables hardware accelleration for artificial intelligence (AI) models for video object detection using inference models such as yolov9 and yolonas.
 
@@ -351,3 +351,4 @@ docker compose logs frigate --follow | grep -i "gpu\|openvino"
 - GPU telemetry requires additional host-level configuration beyond standard containerization
 
 - Proper device permissions and group membership are critical for GPU access
+
